@@ -226,6 +226,7 @@ class MBFF
   void ReadPaths();
   void ReadLibs();
   void SetTrayNames();
+  void ComputeFlopCriticality();
 
   void displayFlopClusters(const char* stage,
                            std::vector<std::vector<Flop>>& clusters);
@@ -254,11 +255,12 @@ class MBFF
   float single_bit_height_;
   float single_bit_width_;
   float single_bit_power_;
+  std::vector<float> flop_criticality_;
 
   // launch-capture FF-pair vars
   std::map<std::string, int> name_to_idx_;
   std::map<int, int> tray_sizes_used_;
-  std::vector<std::vector<int>> paths_;
+  std::vector<std::vector<std::pair<int, float>>> paths_;
 
   // MBFF vars
   template <typename T>

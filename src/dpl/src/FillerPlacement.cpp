@@ -258,6 +258,7 @@ dbMasterSeq& Opendp::gapFillers(
     GridX gap,
     const MasterByImplant& filler_masters_by_implant)
 {
+  logger_->report("Filler gap of size {} at implant {}.", gap, implant ? implant->getName() : "NULL");
   auto iter = filler_masters_by_implant.find(implant);
   if (iter == filler_masters_by_implant.end()) {
     logger_->error(DPL,

@@ -1107,7 +1107,8 @@ double MBFF::RunILP(const std::vector<Flop>& flops,
 
   int num_paths = 0;
   for (size_t i = 0; i < (int) flops.size(); i++) {
-    for (const int j : paths_[flops[i].idx]) {
+    for (const auto& p : paths_[flops[i].idx]) {
+      int j = p.first;
       if (!old_to_new_idx[j]) {
         continue;
       }
@@ -1124,7 +1125,8 @@ double MBFF::RunILP(const std::vector<Flop>& flops,
 
   int cur_path_num = 0;
   for (int i = 0; i < flops.size(); i++) {
-    for (const int end_point : paths_[flops[i].idx]) {
+    for (const auto& p : paths_[flops[i].idx]) {
+      int end_point = p.first;
       int flop_a_idx = old_to_new_idx[flops[i].idx];
       int flop_b_idx = old_to_new_idx[end_point];
       if (!flop_a_idx || !flop_b_idx) {
@@ -1415,6 +1417,17 @@ void MBFF::MinCostFlow(const std::vector<Flop>& flops,
 
   std::vector<std::pair<int, int>> slot_to_tray;
 
+  float max_dist = 0.0f;
+
+  for (int i = 0; i < num_trays; i++) {
+    for (size_t j = 0; j < trays[i].slots.size(); j++) {
+      for (int k = 0; k < num_flops; k++) {
+        float d = GetDist(flops[k].pt, trays[i].slots[j]);
+        max_dist = std::max(max_dist, d);
+      }
+    }
+  }
+
   for (int i = 0; i < num_trays; i++) {
     std::vector<Point> tray_slots = trays[i].slots;
 
@@ -1428,7 +1441,29 @@ void MBFF::MinCostFlow(const std::vector<Flop>& flops,
             = graph.addArc(nodes[k], slot_node);
         edges.push_back(flop_to_slot);
 
-        int edge_cost = (100 * GetDist(flops[k].pt, tray_slots[j]));
+        float dist = GetDist(flops[k].pt, tray_slots[j]);
+
+        float norm_dist = (max_dist > 0.0f) ? (dist / max_dist) : 0.0f;
+
+        float crit = 0.0f;
+        int id = flops[k].idx;
+
+        if (id >= 0 && id < flop_criticality_.size()) {
+          crit = flop_criticality_[id];
+        }
+
+        float weighted_cost = norm_dist + crit;
+
+        int edge_cost = int(10000 * weighted_cost);
+        if (crit > 0.0f)
+          log_->info(GPL, 9991,
+            "FF {} -> slot {} norm_dist={} crit={} weighted_cost={} edge_cost={}",
+              flops[k].idx,
+              j,
+              norm_dist,
+              crit,
+              weighted_cost,
+              edge_cost);
         cur_costs.push_back(edge_cost);
         cur_caps.push_back(1);
       }
@@ -1454,6 +1489,7 @@ void MBFF::MinCostFlow(const std::vector<Flop>& flops,
     costs[edges[i]] = cur_costs[i];
     caps[edges[i]] = cur_caps[i];
   }
+
 
   labels[src] = -1;
   for (size_t i = 0; i < nodes.size(); i++) {
@@ -1971,7 +2007,8 @@ float MBFF::GetPairDisplacements()
 {
   float ret = 0;
   for (int i = 0; i < flops_.size(); i++) {
-    for (const int j : paths_[i]) {
+    for (const auto& p : paths_[flops_[i].idx]) {
+      int j = p.first;
       const float diff_x = slot_disp_x_[i] - slot_disp_x_[j];
       const float diff_y = slot_disp_y_[i] - slot_disp_y_[j];
       ret += std::abs(diff_x) + std::abs(diff_y);
@@ -2237,6 +2274,7 @@ void MBFF::Run(const int mx_sz, const float alpha, const float beta)
 
   ReadFFs();
   ReadPaths();
+  ComputeFlopCriticality();
   ReadLibs();
   SetTrayNames();
 
@@ -2280,7 +2318,7 @@ void MBFF::Run(const int mx_sz, const float alpha, const float beta)
   const float tcp_disp = (beta * GetPairDisplacements());
 
   int num_paths = 0;
-  for (const std::vector<int>& path : paths_) {
+  for (const auto& path : paths_) {
     num_paths += path.size();
   }
 
@@ -2528,9 +2566,62 @@ void MBFF::ReadPaths()
     if (idx1 == idx2 || unique[idx1].count(idx2)) {
       continue;
     }
-    paths_[idx1].push_back(idx2);
+    float slack = path_end->slack(sta_);
+    paths_[idx1].push_back(std::make_pair(idx2, slack));
     unique[idx1].insert(idx2);
   }
+}
+
+void MBFF::ComputeFlopCriticality()
+{
+  flop_criticality_.assign(flops_.size(), 0.0f);
+
+  float worst_slack = 0.0f;
+
+  for (int i = 0; i < flops_.size(); i++) {
+    for (const auto& [j, slack] : paths_[i]) {
+      worst_slack = std::min(worst_slack, slack);
+    }
+  }
+
+  float norm = (worst_slack < 0.0f) ? -worst_slack : 1.0f;
+
+  log_->info(GPL, 9994, "Worst slack: {}", worst_slack);
+
+  for (int i = 0; i < flops_.size(); i++) {
+    for (const auto& [j, slack] : paths_[i]) {
+
+      float crit = 0.0f;
+      if (slack < 0.0f) {
+        crit = (-slack) / norm;
+      }
+
+      log_->info(GPL, 9995,
+        "Path {} -> {} slack={} initial crit={} max prev crits: {} and {}",
+        flop_criticality_[i],
+        flop_criticality_[j],
+        crit);
+        
+      flop_criticality_[i] = std::max(flop_criticality_[i], crit);
+      flop_criticality_[j] = std::max(flop_criticality_[j], crit);
+
+      log_->info(GPL, 9993,
+        "Path {} -> {} slack={} crit={}",
+        insts_[i]->getName(),
+        insts_[j]->getName(),
+        slack,
+        crit);
+    }
+  }
+
+  int critical_count = 0;
+  for (float c : flop_criticality_) {
+    if (c > 0.0f) critical_count++;
+  }
+
+  log_->info(GPL, 9992,
+    "Critical flops identified (continuous): {}",
+    critical_count);
 }
 
 MBFF::MBFF(odb::dbDatabase* db,

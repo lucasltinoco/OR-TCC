@@ -144,7 +144,7 @@ replace_run_mbff_cmd(int max_sz, float alpha, float beta, int num_paths)
 {
   Replace* replace = getReplace();
   int threads = ord::OpenRoad::openRoad()->getThreadCount();
-  replace->runMBFF(max_sz, alpha, beta, threads, num_paths);   
+  replace->runMBFF(max_sz, alpha, beta, threads, 1000);
 }
 
 
