@@ -192,6 +192,11 @@ void Opendp::placeRowFillers(GridY row,
     }
 
     GridX gap = k - j;
+
+    if (!implant) {
+      implant = filler_masters_by_implant.begin()->first;
+    }
+
     dbMasterSeq& fillers = gapFillers(implant, gap, filler_masters_by_implant);
     if (fillers.empty()) {
       DbuX x{core_.xMin() + gridToDbu(j, site_width)};
@@ -255,7 +260,10 @@ dbMasterSeq& Opendp::gapFillers(
 {
   auto iter = filler_masters_by_implant.find(implant);
   if (iter == filler_masters_by_implant.end()) {
-    logger_->error(DPL, 50, "No fillers found for {}.", implant->getName());
+    logger_->error(DPL,
+               50,
+               "No fillers found for implant {}.",
+               implant ? implant->getName() : "NULL");
   }
   const dbMasterSeq& filler_masters = iter->second;
 
