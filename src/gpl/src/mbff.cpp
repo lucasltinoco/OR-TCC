@@ -2537,6 +2537,9 @@ void MBFF::ReadPaths()
                                                    false,
                                                    false);
 
+  log_->info(GPL, 9990,
+           "PathEnds returned by OpenSTA = {}",
+           path_ends.size());
   for (sta::PathEnd* path_end : path_ends) {
     sta::Path* path = path_end->path();
     sta::PathExpanded expanded(path, sta_);
@@ -2570,6 +2573,15 @@ void MBFF::ReadPaths()
     paths_[idx1].push_back(std::make_pair(idx2, slack));
     unique[idx1].insert(idx2);
   }
+  int count = 0;
+
+  for (const auto& v : paths_) {
+    count += v.size();
+  }
+
+  log_->info(GPL, 9999,
+            "Unique FF pairs kept = {}",
+            count);
 }
 
 void MBFF::ComputeFlopCriticality()
@@ -2596,21 +2608,22 @@ void MBFF::ComputeFlopCriticality()
         crit = (-slack) / norm;
       }
 
-      log_->info(GPL, 9995,
-        "Path {} -> {} slack={} initial crit={} max prev crits: {} and {}",
-        flop_criticality_[i],
-        flop_criticality_[j],
-        crit);
+      // log_->info(GPL, 9995,
+      //   "Path {} -> {} slack={} initial crit={} max prev crits: {} and {}",
+      //   flop_criticality_[i],
+      //   flop_criticality_[j],
+      //   crit);
         
       flop_criticality_[i] = std::max(flop_criticality_[i], crit);
       flop_criticality_[j] = std::max(flop_criticality_[j], crit);
 
-      log_->info(GPL, 9993,
-        "Path {} -> {} slack={} crit={}",
-        insts_[i]->getName(),
-        insts_[j]->getName(),
-        slack,
-        crit);
+      if (crit > 0.0f)
+        log_->info(GPL, 9993,
+          "Path {} -> {} slack={} crit={}",
+          insts_[i]->getName(),
+          insts_[j]->getName(),
+          slack,
+          crit);
     }
   }
 
