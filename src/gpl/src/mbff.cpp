@@ -2523,7 +2523,7 @@ void MBFF::ReadPaths()
                                                    sta_->scenes(),
                                                    sta::MinMaxAll::max(),
                                                    num_paths_,
-                                                   1,
+                                                   num_paths_,
                                                    true,
                                                    true,
                                                    -sta::INF,
