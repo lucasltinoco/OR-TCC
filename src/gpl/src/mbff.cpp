@@ -990,9 +990,19 @@ float MBFF::RunLP(const std::vector<Flop>& flops,
 
   operations_research::MPObjective* objective = solver->MutableObjective();
   for (int i = 0; i < num_flops; i++) {
-    objective->SetCoefficient(disp_x[i], 1);
-    objective->SetCoefficient(disp_y[i], 1);
+      float crit = 0.0f;
+
+      int id = flops[i].idx;
+      if (id >= 0 && id < flop_criticality_.size()) {
+          crit = flop_criticality_[id];
+      }
+
+      float weight = 1.0f + crit;
+
+      objective->SetCoefficient(disp_x[i], weight);
+      objective->SetCoefficient(disp_y[i], weight);
   }
+  log_->info(GPL, 157, "Running LP solver...");
   objective->SetMinimization();
   const MPSolver::ResultStatus status = solver->Solve();
   if (status != MPSolver::OPTIMAL && status != MPSolver::FEASIBLE) {
